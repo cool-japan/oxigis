@@ -1,0 +1,81 @@
+[package]
+name = "oxigis-desktop"
+description = "OxiGIS native desktop shell (winit): single binary for Linux/macOS/Windows"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["gis", "desktop", "map", "qgis", "wgpu"]
+categories = ["science::geo", "gui"]
+
+[[bin]]
+name = "oxigis"
+path = "src/main.rs"
+
+[dependencies]
+oxigis-core = { workspace = true }
+oxigis-render = { workspace = true }
+# "geoparquet" is native-only (arrow/parquet); the desktop shell is the one
+# place it is ever enabled — see crates/oxigis-ui/Cargo.toml's [features] and
+# crates/oxigis-web/Cargo.toml, which deliberately does NOT enable it.
+# This line is also why the wasm bundle must be built package-scoped: under a
+# workspace-wide wasm resolve Cargo unifies the feature onto the single
+# `oxigis-ui` that oxigis-web links (workspace Cargo.toml has the detail).
+oxigis-ui = { workspace = true, features = ["geoparquet"] }
+eframe = { workspace = true }
+egui = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# Label fonts: the bundled Latin primary face, plus OS font-directory discovery
+# for the CJK fallback scan (`src/font_scan.rs`). `oxigis-render` never reads a
+# font itself — supplying the bytes is a shell responsibility.
+oxifont-bundled = { workspace = true }
+oxifont-discovery = { workspace = true }
+# fvar introspection for the scan's thin-default demotion (print v1.3): a
+# variable face whose `wght` DEFAULT is a hairline master (NotoSansJP-VF on
+# stock Windows 11 defaults to 100) must rank below the static candidates,
+# because neither the label rasteriser nor the default print path can select
+# a heavier instance. Already in the graph via oxigis-ui; this names the edge.
+ttf-parser = { workspace = true }
+# Native tile fetching (see `src/tile_http.rs` for the Pure-Rust TLS audit).
+ureq = { workspace = true }
+rustls-graviola = { workspace = true }
+
+# Native file dialogs (project Open/Save As, tile-archive Open, PDF export) —
+# Windows AND macOS. Both resolve to pure-Rust bindings with `default-features
+# = false`: Windows to raw-dylib `windows-sys`, macOS to the `objc2` family
+# (block2, dispatch2, objc2, objc2-app-kit, objc2-core-foundation,
+# objc2-foundation), whose build scripts only emit `cargo:rustc-cfg` lines — no
+# `cc`, no `-sys` crate, no prebuilt import library. The workspace manifest
+# carries the full audit trail.
+#
+# Linux is deliberately NOT on this edge: rfd's GTK backend would pull
+# gtk-sys/glib-sys (C) into a Pure-Rust graph, and its `xdg-portal` backend
+# pulls `ashpd` + an async runtime. There the shell asks for the path with its
+# own in-app prompt instead (`file_dialog::PathPrompt`), which needs no
+# platform toolkit at all.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+rfd = { workspace = true }
+
+[dev-dependencies]
+# The live vector-tile smoke test re-decodes the fetched body to print the
+# demo source's layer names; MVT bodies may arrive gzipped.
+oxiarc-deflate = { workspace = true }
+# `fixtures` exposes the hand-built PMTiles archives `range_file`'s tests write
+# to a temp file, so the local-archive transport is proven against the same
+# bytes `oxigis-ui`'s own archive tests use.
+oxigis-render = { workspace = true, features = ["fixtures"] }
+# `fixtures` exposes `oxigis_ui::sample_mbtiles_raster()`, the hand-built
+# indexed `.mbtiles` `range_file`'s local-archive test writes to a temp file.
+# This crate is bin-only, so its tests live inside the binary and cannot see
+# `oxigis-ui`'s `#[cfg(test)]` fixtures; a crate feature is the only seam that
+# crosses the two crates. A dev-dependency feature does not reach
+# `cargo build`, so the shipped `oxigis.exe` carries none of the scaffolding.
+oxigis-ui = { workspace = true, features = ["fixtures"] }
+
+[lints]
+workspace = true

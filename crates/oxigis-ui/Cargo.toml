@@ -1,0 +1,141 @@
+[package]
+name = "oxigis-ui"
+description = "OxiGIS UI panels on OxiUI (egui): layer tree, style editor, attribute table, Processing dialogs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["gis", "gui", "egui", "map", "qgis"]
+categories = ["science::geo", "gui"]
+
+[dependencies]
+oxigis-core = { workspace = true }
+# `decode` + `decode-webp` named explicitly rather than left to
+# `oxigis-render`'s own `default = [...]` (crates/oxigis-render/Cargo.toml):
+# redundant with today's defaults on purpose, so this shell keeps reading WebP
+# raster PMTiles even if a future change trims what that crate turns on by
+# default. Both together because `decode-webp` alone would still leave
+# `decode_jpeg_block` (cog/codec.rs) compiled to its "feature off" stub —
+# only `decode` ungates the real one.
+oxigis-render = { workspace = true, features = ["decode", "decode-webp"] }
+# OxiGeo: the GeoJSON reader/writer (`local_vector`, `shapefile_input`,
+# `gpkg_input`) and the Shapefile driver (`shapefile_input`, byte readers only —
+# see its module docs). Deliberately *not* `gpkg`: `gpkg_input` implements the
+# SQLite file format itself, because `oxigeo-gpkg` 0.2.2 does not follow
+# overflow-page chains — see that module's docs.
+# `oxigis-core` declares only `proj` (it calls nothing else), so this line is
+# the sole source of the GeoJSON and Shapefile readers in the graph — removing
+# it would remove them. Taken directly rather than re-exported through
+# `oxigis-core`, whose crate docs commit to holding no OxiGeo types at all.
+oxigeo = { workspace = true, features = ["geojson", "shapefile"] }
+egui = { workspace = true }
+# `eframe` is here only for its `egui_wgpu`/`wgpu` re-exports (`map_gpu`),
+# which keeps the workspace on one pinned copy of each instead of declaring
+# `egui-wgpu`/`wgpu` again alongside the shells' `eframe`.
+eframe = { workspace = true }
+# The one OxiUI crate this workspace uses: its table *model* backs
+# `attribute_table` and `table_panel` (see their module docs). `oxiui-egui` and
+# `oxiui-theme` were declared here too and referenced by no Rust file — the
+# first is reached from nothing else, so dropping it also takes `oxiui-text`
+# and its share of `oxigis_web_bg.wasm` out of the graph; the second still
+# resolves as oxiui-table's own dependency, so only the dead edge went.
+oxiui-table = { workspace = true, features = ["egui-table", "theme-table"] }
+# `parking_lot::Mutex` guards the tile provider's shared store: no poisoning,
+# so the lock sites need no `unwrap`/`expect` (COOLJAPAN Policy #3).
+parking_lot = { workspace = true }
+# Vector tiles are often stored gzipped (MBTiles/PMTiles archives); this is the
+# COOLJAPAN Pure-Rust inflater `oxigis-render` already uses for COG DEFLATE.
+# `print` additionally uses its zlib *compressor* for PDF `/FlateDecode`.
+oxiarc-deflate = { workspace = true }
+# PDF export (`print`): the low-level writer with no compression of its own —
+# see the workspace manifest for the audit that picked it.
+pdf-writer = { workspace = true }
+# PDF export (`print::document`): `/DCTDecode` for photographic basemap
+# rasters — at typical basemap quality this is materially smaller than the
+# `/FlateDecode` zlib path, which a photographic tile's high pixel entropy
+# defeats. Adds NO new crate to the graph: `image` v0.25.10 with this exact
+# workspace feature set (`png` + `jpeg`, both pure Rust — see the workspace
+# manifest's comment on the entry) is already pulled in transitively through
+# `oxigis-render`'s `decode` feature (which turns on `image/jpeg` itself) and
+# through `eframe`'s clipboard dependency; this only names the edge directly
+# so `print::document` can reach `image::codecs::jpeg::JpegEncoder`. Verify:
+# `cargo tree -p oxigis-ui --all-features -e normal` shows the same package
+# set before and after this line, `image` included either way.
+image = { workspace = true }
+# Embedded-font machinery for the PDF export (`print::font`): `oxifont-subset`
+# cuts a used-glyphs-only font program and pins a variable face at one static
+# instance, ttf-parser reads cmap/metrics. Audits on the workspace manifest
+# lines.
+#
+# Production dependency AND the print tests' fixture builder — the same crate
+# reached through two entry points. The fixture calls the CODEPOINT entry
+# point (`subset_font`), so its output keeps a populated `cmap` and gives the
+# font-chain walk a genuine partial face; the export passes an EMPTY codepoint
+# map, so the embedded program carries an empty `cmap` (an Identity-H CIDFont
+# selects glyphs through the PDF's own CMap and needs none). The two paths
+# differ by argument, not by crate. `[dependencies]` are visible to
+# `#[cfg(test)]` code, so the fixture needs no dev-dependency entry.
+oxifont-subset = { workspace = true }
+ttf-parser = { workspace = true }
+# Shaped PDF text (`print::shape`): the same swash-backed shaper the
+# on-screen label pass already runs through `oxigis-render`, so page metrics
+# and screen metrics agree by construction. NOT a new crate in the graph —
+# oxigis-render already depends on it; this only names the edge
+# (`cargo tree -d | grep oxitext` must stay empty).
+oxitext = { workspace = true }
+serde = { workspace = true }
+# GeoJSON `Properties` *is* a `serde_json::Map<String, Value>`, so building
+# properties from DBF cells (`shapefile_input`) needs the crate by name. Already
+# in the graph twice over (oxigeo-geojson, oxigis-core); this only names it.
+serde_json = { workspace = true }
+tracing = { workspace = true }
+# GeoParquet (native-only, see [features] below): optional so the default
+# oxigis-ui build stays dependency-identical to before this feature existed.
+oxigeo-geoparquet = { workspace = true, optional = true }
+parquet = { workspace = true, optional = true }
+arrow = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
+
+[features]
+# GeoParquet read support (`geoparquet_input`) — off by default. Enabled by
+# oxigis-desktop only; oxigis-web must never request this (arrow/parquet are
+# heavy and native-only — see the workspace Cargo.toml's comment on the
+# `oxigeo-geoparquet` dependency line and `geoparquet_input`'s module docs).
+#
+# "oxigis-web does not request it" holds per PACKAGE, not per workspace: a
+# workspace-wide wasm resolve unifies this crate's features across all members,
+# so oxigis-desktop's `geoparquet` lands in the same `oxigis-ui` that
+# oxigis-web links. The bundle is built package-scoped for exactly that reason
+# — see the workspace manifest for the two `cargo tree` commands that show both
+# halves.
+geoparquet = ["dep:oxigeo-geoparquet", "dep:parquet", "dep:arrow", "dep:bytes"]
+# Exposes `sample_mbtiles_raster()`, a hand-built indexed raster `.mbtiles`.
+# **Test scaffolding only** — the same shape as `oxigis-render`'s `fixtures`
+# feature and enabled the same way, through a *dev*-dependency. It ungates
+# `mbtiles::fixture` and `gpkg_input::fixture`, which are ~1 166 lines of
+# hand-assembled SQLite that must not reach a shipped binary.
+#
+# `oxigis-web` must NEVER enable this: it would compile the scaffolding into
+# `oxigis_web_bg.wasm`, which both fixture modules' docs promise it does not.
+# A dev-dependency feature does not reach `cargo build` — verified:
+# `cargo build -p oxigis-desktop -v` compiles this crate with `feature=
+# "geoparquet"` only — so `oxigis.exe` is unaffected too.
+fixtures = []
+
+[dev-dependencies]
+# Real font bytes for the label-pass tests (Noto Sans Regular, OFL-1.1).
+# Test-only here: the *shells* carry it as a real dependency, this crate only
+# ever receives font bytes through `map_gpu::set_label_fonts`.
+oxifont-bundled = { workspace = true }
+# `fixtures` exposes `oxigis_render::sample_cog_bytes()`, the synthetic COG the
+# render crate's own parser tests use, so the two cannot drift apart.
+oxigis-render = { workspace = true, features = ["fixtures"] }
+# `block_on` for the one test that cross-checks the async reader.
+futures = { workspace = true }
+
+[lints]
+workspace = true

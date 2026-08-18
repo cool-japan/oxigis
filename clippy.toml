@@ -1,0 +1,4 @@
+# COOLJAPAN Policy #3: no unwrap/expect on production paths — tests are exempt.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

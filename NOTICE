@@ -1,0 +1,109 @@
+OxiGIS
+Copyright 2026 COOLJAPAN OU (Team Kitasan)
+
+This product is licensed under the Apache License, Version 2.0; see the
+LICENSE file in this directory for the full text.
+
+This NOTICE file is required reading for anyone REDISTRIBUTING OxiGIS —
+source, the `oxigis` desktop binary, or the `oxigis_web_bg.wasm` bundle.
+Apache-2.0 section 4(d) requires it to travel with every copy, and the font
+licences in section 1 below have the same obligation for the font programs
+compiled into both artifacts.
+
+
+================================================================================
+1. Embedded font software
+================================================================================
+
+Both shipped artifacts embed complete font programs at compile time (Rust
+`include_bytes!`), so the fonts are redistributed by the binary itself, not
+only by this source tree. SIL OFL-1.1 section 2 and the Ubuntu Font Licence
+1.0 section 1 both require the copyright notice and licence to accompany
+every such distribution, whether or not the font file is separately visible.
+
+1.1 Noto fonts — SIL Open Font License, Version 1.1
+    Source: the `oxifont-bundled` crate, feature `bundled-noto`.
+    Faces:  NotoSans-Regular, NotoSans-Bold, NotoSans-Italic,
+            NotoSansMono-Regular, NotoSerif-Regular.
+    Role:   NotoSans-Regular is the label pass's primary face in both shells
+            (`oxigis-desktop/src/main.rs`, `oxigis-web/src/lib.rs`); the rest
+            arrive with the same crate.
+
+      Copyright 2022 The Noto Project Authors
+      (https://github.com/notofonts/latin-greek-cyrillic)
+
+    Licensed under the SIL Open Font License, Version 1.1. The full licence
+    text ships inside the crate as `fonts/LICENSE-OFL.txt` and is available
+    with its FAQ at https://scripts.sil.org/OFL.
+    Noto is a trademark of Google LLC.
+
+1.2 egui / epaint default fonts
+    Source: the `epaint_default_fonts` crate, reached through `epaint`'s
+    default-on `default_fonts` feature. These faces are linked into both
+    artifacts even where the application supplies its own font set, because
+    the crate embeds them unconditionally.
+
+    Hack-Regular — MIT License
+      Copyright (c) 2018 Source Foundry Authors
+      Contains glyph work derived from Bitstream Vera Sans Mono,
+      Copyright (c) 2003 by Bitstream, Inc., licensed under the Bitstream
+      Vera License with the Reserved Font Names "Bitstream" and "Vera", and
+      from the DejaVu project, committed to the public domain. Full text in
+      the crate as `fonts/Hack-Regular.txt`.
+
+    Ubuntu-Light — Ubuntu Font Licence, Version 1.0
+      Copyright 2011 Canonical Ltd.
+      Full text in the crate as `fonts/UFL.txt`. Ubuntu and Canonical are
+      registered trademarks of Canonical Ltd.
+
+    NotoEmoji-Regular — SIL Open Font License, Version 1.1
+      Copyright 2013 Google Inc. All Rights Reserved.
+      Full text in the crate as `fonts/OFL.txt`.
+      Noto is a trademark of Google Inc.
+
+    emoji-icon-font — MIT License
+      Copyright (c) 2014 John Slegers
+      Full text in the crate as `fonts/emoji-icon-font-mit-license.txt`.
+
+1.3 Fonts that are NOT redistributed
+    The desktop shell's CJK fallback reads faces already installed on the
+    host (`oxigis-desktop/src/font_scan.rs`) and the web shell fetches its
+    CJK and print-only faces at runtime (`oxigis-web/src/font_fetch.rs`).
+    Neither path embeds anything, so neither adds an obligation here — but a
+    redistributor who chooses to bundle those fetched faces takes on their
+    licences and must extend this file accordingly.
+
+
+================================================================================
+2. Third-party Rust dependencies
+================================================================================
+
+`Cargo.lock` is the authoritative list of the several hundred crates in the
+resolved dependency graph. Their licences are constrained by `deny.toml`'s
+`[licenses] allow` list, which admits only permissive terms — Apache-2.0,
+Apache-2.0 WITH LLVM-exception, MIT, MIT-0,
+BSD-2-Clause, BSD-3-Clause, ISC, Zlib, Unicode-3.0, MPL-2.0, CC0-1.0,
+CDLA-Permissive-2.0, 0BSD, Unlicense, BSL-1.0, and the font licences above —
+and `cargo deny check licenses` fails on anything else.
+
+A per-crate attribution inventory (THIRD-PARTY-LICENSES.md) is NOT yet
+generated and is a prerequisite for the first public binary release, because
+several Apache-2.0 dependencies carry NOTICE files of their own that section
+4(d) requires propagating. Generate it with `cargo about generate` or
+`cargo deny check licenses` output and commit it beside this file.
+
+
+================================================================================
+3. Known gap: this file does not reach the published crates
+================================================================================
+
+Cargo packages a crate from its own directory and never walks above it, so
+none of the five `crates/oxigis-*` tarballs contain this file — verify with
+`cargo package --list -p oxigis-web`, which lists neither NOTICE nor LICENSE.
+
+The obligations in section 1 attach to each distributed artifact, so before
+the first `cargo publish` each shipping crate needs its own copy (a
+`crates/<crate>/NOTICE` alongside a `crates/<crate>/LICENSE`, or a
+`license-file` pointer in its manifest), and the desktop/wasm release archives
+need this file beside the binary. Until then, redistribution is compliant only
+from this repository, not from crates.io.

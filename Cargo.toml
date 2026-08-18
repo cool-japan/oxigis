@@ -1,0 +1,315 @@
+# OxiGIS — Pure Rust Implementation of Full-Stack GIS Interface
+# © 2026 COOLJAPAN OU (Team Kitasan) · Apache-2.0
+#
+# All dependency versions are managed here (COOLJAPAN Policy #5).
+# Member crates reference them with `*.workspace = true` only.
+
+[workspace]
+resolver = "3"
+members = [
+    "crates/oxigis-core",
+    "crates/oxigis-render",
+    "crates/oxigis-ui",
+    "crates/oxigis-web",
+    "crates/oxigis-desktop",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+authors = ["COOLJAPAN OU (Team Kitasan)"]
+license = "Apache-2.0"
+repository = "https://github.com/cool-japan/oxigis"
+homepage = "https://github.com/cool-japan/oxigis"
+readme = "README.md"
+
+[workspace.dependencies]
+# ---- Internal crates -------------------------------------------------------
+oxigis-core = { version = "0.1.0", path = "crates/oxigis-core" }
+oxigis-render = { version = "0.1.0", path = "crates/oxigis-render" }
+oxigis-ui = { version = "0.1.0", path = "crates/oxigis-ui" }
+
+# ---- COOLJAPAN ecosystem (Policy #9: prefer internal deps) -----------------
+# OxiGeo: data I/O, CRS/projection, spatial analysis (replaces GDAL et al.)
+oxigeo = { version = "0.2.4", default-features = false }
+# OxiUI: Pure Rust UI facade (egui backend). Exactly one crate of it is used —
+# `oxiui-table`'s model (`Table`/`Cell`/`ColumnDef`/`RowSource`) behind
+# `attribute_table` and `table_panel`; the panels themselves are plain `egui`.
+#
+# The facade (`oxiui`) and the render-wgpu/text/accessibility crates once had
+# entries here that NO member manifest referenced. A `[workspace.dependencies]`
+# entry with no member edge never resolves, never reaches Cargo.lock and has no
+# effect on version selection, so those four pins were documentation that no
+# build could ever contradict — removed rather than left to rot. `oxiui-theme`
+# is likewise gone as a direct edge: it still resolves, as `oxiui-table`'s own
+# dependency. Re-adding any of them means adding a real member edge too.
+#
+# The caret admits, and the graph resolves, oxiui-table 0.2.2 — crates.io
+# latest. The requirement is left at 0.2.1 because it is the floor the egui
+# 0.35 pin below is reasoned against; bump both in one commit or neither.
+oxiui-table = { version = "0.2.1" }
+
+# ---- GPU / windowing / immediate-mode UI -----------------------------------
+# NOTE: egui/eframe 0.35.x and wgpu 29.x are pinned externally, so these three
+# stay behind crates.io latest (egui/eframe 0.36.1, wgpu 30.0.0) on purpose:
+# `oxiui-table` 0.2.x requires egui/eframe ^0.35, and egui-wgpu 0.35 — reached
+# through eframe's `wgpu` feature — tracks wgpu ^29. Do NOT bump wgpu to 30
+# until both OxiUI and egui-wgpu do, or two incompatible copies end up in the
+# graph (check with `cargo tree -d`).
+#
+# `winit` had an entry here and no member edge, so it never resolved from this
+# line; the copy that builds arrives through eframe -> egui-winit. Removed for
+# the same reason as the dead oxiui-* entries above.
+wgpu = "29.0.4"
+egui = "0.35.0"
+eframe = { version = "0.35.0", features = ["wgpu"] }
+
+# ---- Geometry / encoding ---------------------------------------------------
+lyon = "1.0.19"          # polygon tessellation (Pure Rust)
+prost = "0.14.4"         # protobuf for MVT decode (Pure Rust)
+bytemuck = { version = "1.25.2", features = ["derive"] }
+# Raster tile decode (PNG/JPEG/WebP -> RGBA8). Pure Rust: png -> fdeflate/flate2
+# (miniz_oxide backend), jpeg -> zune-jpeg, webp -> image-webp (+ quick-error).
+# default-features off to exclude every other (potentially C-bound) codec; only
+# png+jpeg are enabled HERE. webp is deliberately NOT in this list — see below.
+#
+# `webp` joined in tiles v1.3: raster PMTiles archives in circulation store WebP
+# (the pmtiles.io USGS sample declares `tile_type = 4`), and without the codec
+# every tile of such an archive fails with a generic "could not sniff image
+# format". The cost was measured with `cargo tree --edges normal`: exactly two
+# new crates, `image-webp` and `quick-error`, both pure Rust, neither an `-sys`
+# crate nor carrying a build script, both MIT OR Apache-2.0 (already on
+# deny.toml's allow list). AVIF stays out and is refused by name at archive open.
+#
+# That cost is opted into per-CONSUMER, not forced here: a `features = [...]`
+# list on a `[workspace.dependencies]` entry for an optional dependency applies
+# unconditionally the moment anything at all activates `dep:image`, which would
+# make `oxigis-render`'s own `decode-webp` Cargo feature
+# (crates/oxigis-render/Cargo.toml) a no-op it could never turn off — exactly
+# the bug this comment used to describe by omission. `webp` is instead switched
+# on by that feature alone (`image/webp`), default-on there for the same
+# PMTiles reason above. `oxigis-ui` and `oxigis-web` re-assert `decode-webp`
+# explicitly on their own `oxigis-render` edge rather than leaning on default-
+# feature inheritance (see those manifests), so the shells keep reading WebP
+# tiles even if `oxigis-render`'s own defaults ever change. A consumer that
+# wants the two crates gone entirely builds oxigis-render with
+# `default-features = false, features = ["decode"]`.
+# Verify: `cargo tree -p oxigis-render --no-default-features --features decode
+# -e normal | grep image-webp` must be empty; plain `cargo tree -p
+# oxigis-render -e normal` (defaults) must still show it.
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
+# COG tile decompression (Pure Rust, COOLJAPAN oxiarc ecosystem — never flate2).
+# `oxiarc-deflate` covers TIFF Compression 8 / 32946 (zlib-wrapped DEFLATE),
+# `oxiarc-lzw` covers Compression 5 (TIFF LZW, MSB-first, early-change).
+# Same choice `oxigeo-wasm` makes for its browser COG reader.
+#
+# 0.4.x tracks oxigeo 0.2.3 (oxigeo-geotiff depends on oxiarc-* ^0.4.0) and
+# oxifont 0.2.1 (via OxiUI 0.2.1). Single-version since oxiproj 0.1.3
+# (2026-08-05): oxiproj-grids moved to ^0.4.0, retiring the graph's last
+# 0.3.6 copy. Check with `cargo tree -d | grep oxiarc` (must stay empty).
+oxiarc-deflate = "0.4.1"
+oxiarc-lzw = "0.4.1"
+
+# ---- Print / PDF export (§7 Phase 3) ---------------------------------------
+# typst's low-level PDF writer: deps are bitflags/itoa/memchr/ryu only,
+# identical on wasm32, no build scripts, no -sys crates (audited 2026-07-31;
+# printpdf/krilla/svg2pdf/lopdf all drag flate2 or miniz_oxide, which
+# `deny.toml` bans). Stream compression is hand-wired through oxiarc-deflate's
+# zlib (RFC 1950) instead.
+pdf-writer = "0.15.0"
+
+# Font subsetting and static variable-font instancing for the PDF's embedded
+# Type0/CID fonts. COOLJAPAN ecosystem crate, Pure Rust, `#![forbid(unsafe_code)]`,
+# and its whole dependency closure — oxifont-core (no deps of its own),
+# oxifont-parser, ttf-parser — already resolves in the graph. `parallel`
+# (rayon) is a non-default feature and stays off, so nothing wasm-hostile
+# joins; the swap in fact REMOVES wasm weight (subsetter's fontations stack).
+#
+# Replaces `subsetter` 0.2.6 (audited 2026-08-03/04). The three gaps that
+# forced the third-party choice are closed in 0.2.2: `ttcf` collections
+# subset by face index (the `_at_face` entry points), `SubsetGidMap` returns
+# the old->new glyph-id map that IS the PDF CID assignment, and CFF subsets
+# are stamped `OTTO`. 0.2.2 additionally adds `instance()`, the static
+# instancer the `FaceRole::PrintOnly` variable-font rung needs (print v1.3
+# item C) — it pins the whole face at one design location with glyph ids
+# unchanged, so the ordinary subset call then runs over static bytes. The
+# audit findings behind the swap were fixed directly in oxifont 0.2.2.
+#
+# Registry release since 2026-08-10: was a TEMPORARY git dependency on the
+# `0.2.2` branch (rev 900dd4b) while 0.2.2 was unpublished; now on
+# crates.io, so oxifont-core/oxifont-parser unify at a single version again
+# (`cargo tree -d | grep oxifont` must stay empty). The matching
+# `deny.toml` `[sources] allow-git` entry was deleted in the same commit.
+oxifont-subset = "0.2.2"
+
+# Font introspection for the print path (cmap char→GID walk, hmtx advances,
+# FontDescriptor metrics, TTC face handling, CFF flavour test). NOT a new
+# crate: 0.25.1 already resolves in the graph via oxitext/oxifont-parser/
+# fontdue — this only names the edge.
+ttf-parser = "0.25.1"
+
+# ---- Text / labels (§5.3) --------------------------------------------------
+# OxiText: Pure Rust shape → layout → raster pipeline. Default features only
+# (`pure` = swash shaping + fontdue rasterisation, which is what gives kerning
+# and the built-in per-cluster CJK fallback). `icu`, `sdf` and `parallel` stay
+# OFF: the first is a large CLDR payload, the second is Phase 2+, and the third
+# pulls rayon (a no-op on wasm32 anyway).
+oxitext = "0.2.3"
+# The glyph rasteriser oxitext itself uses, taken as a *direct* dependency for
+# one reason: `oxitext::Pipeline` drops the per-glyph bearings on the floor
+# (its own compositor blits every bitmap top-left at the baseline pen — see
+# `RenderResult::composite_to_rgba`), which top-aligns descenders. Going one
+# level down to `RasterBackend::rasterize_full` recovers `bearing_x`/`ymin` and
+# with them correct glyph placement. Same version as oxitext's own copy, so the
+# graph unifies (`cargo tree -d | grep oxitext` must stay empty).
+oxitext-raster = "0.2.3"
+# Noto Sans Regular bytes (OFL-1.1), 431 KB. A *real* dependency of both
+# shells — they are what hands `LabelEngine` its primary face — and a
+# dev-dependency of `oxigis-render`/`oxigis-ui`, which never embed a font
+# themselves (fonts arrive as injected bytes; see `oxigis_ui::label_frame`).
+# Deliberately Latin-only: a CJK face is 16 MB and has no business in a wasm
+# bundle, so CJK arrives through the fallback chain at runtime.
+oxifont-bundled = { version = "0.2.2", features = ["bundled-noto"] }
+# OS font-directory discovery, for the desktop shell's CJK fallback scan.
+# `default-features = false` states the intent — a system font directory holds
+# TTF/OTF/TTC, never WOFF, so the WOFF1/WOFF2 decoders and `oxifont-webfont`
+# have nothing to do here.
+#
+# It is a NO-OP today, and deliberately kept anyway. Cargo unifies features
+# across every edge to a package, and a second edge re-enables the defaults:
+# `oxitext` 0.2.3 takes `oxifont` 0.2.2 WITH defaults, `oxifont`'s
+# `default = ["pure", "discovery"]` turns on `discovery = ["dep:oxifont-
+# discovery"]` with ITS defaults, and `oxifont-discovery`'s
+# `default = ["woff1", "woff2"]` is what pulls `oxifont-webfont`. Since
+# `oxitext` is a dependency of `oxigis-render`, the WOFF decoders compile into
+# `oxigis_web_bg.wasm` too, where they can never run. Verify with
+# `cargo tree -p oxigis-web --target wasm32-unknown-unknown -i oxifont-webfont`.
+#
+# Only upstream can close it: `oxitext` must take `oxifont` with
+# `default-features = false, features = ["pure"]`, and `oxifont`'s `discovery`
+# must stop forwarding `oxifont-discovery`'s WOFF defaults. Not yet reported
+# upstream (tracked in TODO.md). The flag stays so the intent survives the day
+# upstream lands, and so this manifest does not silently start shipping WOFF
+# on purpose.
+oxifont-discovery = { version = "0.2.2", default-features = false }
+
+# ---- GeoParquet (native-only) -----------------------------------------------
+# Gated behind oxigis-ui's "geoparquet" Cargo feature, enabled only by
+# oxigis-desktop (see crates/oxigis-ui/Cargo.toml / crates/oxigis-desktop/
+# Cargo.toml) — oxigis-web never requests it, so arrow/parquet stay out of the
+# shipped wasm bundle, which is built PACKAGE-SCOPED (`wasm-pack build
+# crates/oxigis-web`, see crates/oxigis-web/serve.sh).
+#
+# That scope is load-bearing, not incidental. Cargo unifies features across the
+# selected workspace members, so a workspace-WIDE wasm resolve compiles one
+# `oxigis-ui` carrying the union of every member's requested features —
+# including oxigis-desktop's `geoparquet` — and `oxigis-web` then links it.
+# Both halves are observable:
+#   cargo tree --workspace   --target wasm32-unknown-unknown -i parquet  # found
+#   cargo tree -p oxigis-web --target wasm32-unknown-unknown -i parquet  # none
+# So never add a bare `cargo build --workspace --target wasm32-unknown-unknown`
+# to a release path: it would pull the whole arrow/parquet/chrono/brotli/snap/
+# lz4_flex closure into the bundle without any manifest changing.
+#
+# Direct leaf-crate dependency rather than going through
+# `oxigeo`'s own (non-default) `geoparquet` feature: that feature forwards
+# none of oxigeo-geoparquet's codec sub-features, so Snappy/Brotli/LZ4 need
+# this edge regardless (same "take the leaf crate directly" reasoning
+# `local_vector.rs` already applies to `oxigeo` itself).
+#
+# Codec allow-list = uncompressed + Snappy + Brotli + LZ4 (all Pure Rust,
+# already wrapped for `parquet` in deny.toml). Deliberately NOT enabling:
+# `gzip` (its backing `flate2` is only wrapped for the png/tiff codecs today —
+# enabling it needs a deny.toml `wrappers` addition, out of scope here) or
+# `zstd` (oxigeo-geoparquet exposes no feature for it at all — the real
+# `zstd`/`zstd-sys` C binding is hard-banned in deny.toml with no `wrappers`
+# escape, by design).
+oxigeo-geoparquet = { version = "0.2.4", default-features = false, features = [
+    "std",
+    "snappy",
+    "brotli",
+    "lz4",
+] }
+# Same resolved copy oxigeo-geoparquet itself depends on (arrow/parquet ^59,
+# default-features off); declared directly only because oxigis-ui's reader
+# names arrow/parquet types (bytes-based `ArrowReaderMetadata`/pushdown read,
+# typed property mapping) — not a second copy of either crate.
+parquet = { version = "59", default-features = false, features = ["arrow"] }
+arrow = { version = "59", default-features = false }
+bytes = "1"
+
+# ---- Serialization / errors / logging --------------------------------------
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.20"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
+log = "0.4.33"
+
+# ---- Async / concurrency ---------------------------------------------------
+# `pollster` had an entry here declaring 1.0.1 and no member edge, so it never
+# resolved from this line while the copy that actually builds is pollster 0.4.0,
+# pulled by eframe's `wgpu_no_default_features` feature — a different MAJOR from
+# the one this file advertised. Removed rather than corrected: writing
+# `pollster = { workspace = true }` against it would have added a second,
+# incompatible copy to the graph.
+futures = "0.3.33"
+parking_lot = "0.12.5"
+
+# ---- Native HTTP (tile fetching, desktop shell only) -----------------------
+# Pure Rust HTTP/1.1 client, blocking API — no async runtime needed.
+# `default-features = false` drops ureq's `gzip` (flate2) and `brotli`
+# decoders, both of which `deny.toml` bans outside the png/tiff/parquet
+# wrappers; raster tiles are already compressed, so nothing is lost.
+# `rustls-no-provider` gives rustls *without* a crypto backend: ureq's default
+# `rustls` feature would enable `ring`, which contains C. The provider is
+# supplied explicitly as `rustls-graviola` (Rust + assembly, no `cc`, no -sys
+# crate), and `rustls-webpki-roots` bundles the Mozilla root store so no system
+# OpenSSL is involved either.
+#
+# That invariant is ENFORCED, not audited by hand: deny.toml bans `ring`,
+# `aws-lc-sys`, `aws-lc-rs`, `openssl*`, `native-tls` and `security-framework-
+# sys` outright, so restoring ureq's default features fails
+# `cargo deny check bans` instead of silently linking C crypto. Change the
+# feature list here and there in the same commit, or not at all.
+ureq = { version = "3.4.0", default-features = false, features = [
+    "rustls-no-provider",
+    "rustls-webpki-roots",
+] }
+rustls-graviola = "0.4.0"
+
+# ---- Native file dialogs (desktop shell, Windows only) ----------------------
+# Audited 2026-07-31 (TODO §1.7): with default features off, rfd on
+# x86_64-pc-windows-msvc resolves to log + raw-window-handle + windows-sys →
+# windows-link (raw-dylib linking; no GTK, no C sources, no prebuilt import
+# libs) — Pure Rust policy compatible. Linux would pull GTK, so the dep is a
+# `cfg(windows)` edge in oxigis-desktop and other platforms keep the
+# CWD-write fallback.
+rfd = { version = "0.17.2", default-features = false }
+
+# ---- WASM shell ------------------------------------------------------------
+wasm-bindgen = "0.2.127"
+wasm-bindgen-futures = "0.4.77"
+web-sys = "0.3.104"
+js-sys = "0.3.104"
+console_error_panic_hook = "0.1.7"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"    # COOLJAPAN Policy #4 (wgpu boundary: ask User first)
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"      # Policy #3 — becomes an error under `-D warnings`;
+expect_used = "warn"      # tests are exempted via clippy.toml
+
+[profile.release]
+lto = "thin"
+strip = "debuginfo"
+
+# Size-optimized profile for the WASM bundle (`--profile wasm-release`).
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+codegen-units = 1

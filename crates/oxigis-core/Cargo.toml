@@ -1,0 +1,38 @@
+[package]
+name = "oxigis-core"
+description = "OxiGIS platform-independent core: layer model, style model, project format, Processing registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["gis", "geospatial", "qgis", "map", "layers"]
+categories = ["science::geo", "data-structures"]
+
+[dependencies]
+# OxiGeo, for exactly one thing: `proj`, the Pure-Rust projection engine that
+# `crs::reproject` drives (ellipsoidal Transverse Mercator + Helmert datum
+# shift). That is the whole of this crate's OxiGeo surface — `grep -rn oxigeo
+# crates/oxigis-core/src/` reaches only `crs/`.
+#
+# The feature list used to read `["geojson", "geotiff", "shapefile", "proj"]`
+# with not a single `oxigeo` reference in the crate. Because Cargo features are
+# additive and unify across the graph, that made every consumer — including the
+# wasm32 browser shell, which cannot do file-level GeoTIFF I/O at all — compile
+# `oxigeo-geotiff` and the two vector readers for nothing. Trimmed to what is
+# called: `oxigis-ui` already declares the `geojson` + `shapefile` pair it
+# genuinely uses on its own manifest, so nothing downstream loses a reader.
+#
+# Adding a feature back here means adding a call site in this crate's `src/`
+# in the same commit.
+oxigeo = { workspace = true, features = ["proj"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

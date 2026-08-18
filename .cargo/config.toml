@@ -1,0 +1,4 @@
+# getrandom on wasm32-unknown-unknown needs an explicit JS backend opt-in
+# (harmless when getrandom is absent from the graph).
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]

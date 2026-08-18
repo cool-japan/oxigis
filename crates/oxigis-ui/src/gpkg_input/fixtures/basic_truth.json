@@ -1,0 +1,74 @@
+{
+  "tables": {
+    "cities": {
+      "srs_id": 4326,
+      "geometry_type": "POINT",
+      "feature_count": 4,
+      "first_point_lonlat": [
+        139.6917,
+        35.6895
+      ],
+      "columns": [
+        "fid",
+        "geom",
+        "name",
+        "name ja",
+        "population",
+        "elevation",
+        "active",
+        "notes"
+      ],
+      "null_geometry_rows": 1,
+      "fids": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    "parks": {
+      "srs_id": 4326,
+      "geometry_type": "POLYGON",
+      "feature_count": 2,
+      "big_row_wkb_bytes": 9621,
+      "big_ring_vertices": 600,
+      "columns": [
+        "fid",
+        "geom",
+        "name",
+        "area_ha"
+      ],
+      "donut_holes": 1
+    },
+    "roads": {
+      "srs_id": 3857,
+      "geometry_type": "LINESTRING",
+      "feature_count": 1,
+      "first_vertex_3857": [
+        15550408.8,
+        4257159.1
+      ],
+      "first_vertex_lonlat_approx": [
+        139.7016,
+        35.6813
+      ],
+      "envelope_in_gp_header": true,
+      "columns": [
+        "fid",
+        "geom",
+        "name"
+      ]
+    },
+    "regions": {
+      "srs_id": 2154,
+      "refused": true,
+      "srs_name": "RGF93 / Lambert-93"
+    },
+    "notes_attr": {
+      "data_type": "attributes",
+      "skipped": true
+    }
+  },
+  "page_count": 15,
+  "page_size": 4096
+}

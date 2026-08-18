@@ -1,0 +1,93 @@
+[package]
+name = "oxigis-web"
+# Keep this in step with README.md's feature list: it is what crates.io shows,
+# and it named OPFS / the File System Access API for a while although neither
+# is implemented — the shell's answer to "open a file" is the drop gesture.
+description = "OxiGIS WASM shell: wasm-bindgen + WebGPU/WebGL2, fetch/Range tile transport, drag-and-drop data ingestion"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["gis", "wasm", "webgpu", "map", "browser"]
+categories = ["science::geo", "wasm", "web-programming"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+oxigis-core = { workspace = true }
+# `decode` + `decode-webp` named explicitly rather than left to
+# `oxigis-render`'s own `default = [...]` (crates/oxigis-render/Cargo.toml):
+# redundant with today's defaults on purpose, so this shell keeps reading WebP
+# raster PMTiles even if a future change trims what that crate turns on by
+# default. Both together because `decode-webp` alone would still leave
+# `decode_jpeg_block` (cog/codec.rs) compiled to its "feature off" stub —
+# only `decode` ungates the real one.
+oxigis-render = { workspace = true, features = ["decode", "decode-webp"] }
+oxigis-ui = { workspace = true }
+eframe = { workspace = true }
+egui = { workspace = true }
+# The label pass's primary font (Noto Sans Regular, Latin, OFL-1.1 — 431 KB).
+# Compiled in deliberately; the CJK fallback is fetched at runtime instead, see
+# `src/font_fetch.rs`.
+oxifont-bundled = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+# Only the DOM surface the shell touches: locate `#oxigis_canvas` and the
+# `#oxigis_status` banner. eframe pulls in the rest of the web-sys features it
+# needs itself; these are declared explicitly so we never rely on unification.
+# `Request`/`RequestInit`/`RequestMode`/`Response` are the `fetch()` surface
+# `tile_fetch` needs for XYZ raster tiles; `Headers` is additionally needed by
+# `range_fetch` to send the COG reader's `Range` header.
+# `Blob`/`BlobPropertyBag`/`Url`/`HtmlAnchorElement`/`HtmlElement` are the
+# download surface every file this shell delivers goes through: bytes → Blob →
+# object URL → synthetic <a> click.
+# `History`/`Location` are what generate `Window::history()` / `Window::location()`,
+# without which `permalink_url.rs` cannot make a typed call at all and has to
+# reach both through `js_sys::Reflect` and stringly-typed property names.
+web-sys = { workspace = true, features = [
+    "Blob",
+    "BlobPropertyBag",
+    "Document",
+    "Element",
+    "Headers",
+    "History",
+    "HtmlAnchorElement",
+    "HtmlCanvasElement",
+    "HtmlElement",
+    "Location",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
+    "Url",
+    "Window",
+] }
+js-sys = { workspace = true }
+console_error_panic_hook = { workspace = true }
+log = { workspace = true }
+# `oxigis-ui` (80 call sites) and `oxigis-render` (6) diagnose through
+# `tracing`, and eframe's `WebLogger` bridges only the `log` crate — so in a
+# browser every one of those events is discarded, devtools console included.
+# `tracing`'s `log` feature emits a `log` record for each event WHEN NO
+# `tracing` subscriber is active (not `log-always`, which emits one either
+# way), which is exactly this shell's situation, so they all reach the console
+# through `WebLogger`. Declared under the wasm32 table so native builds keep
+# `oxigis-desktop`'s real subscriber and gain no duplicate records; see the
+# crate docs in src/lib.rs (# Diagnostics).
+#
+# This crate has ZERO `tracing::` call sites of its own — the dependency exists
+# solely to turn the feature on in the wasm32 feature graph, so an unused-deps
+# pass must NOT delete it. Feature-only: `log` 0.4 is already a direct
+# dependency above, so no crate enters the graph and `cargo deny check bans` is
+# unaffected.
+tracing = { workspace = true, features = ["log"] }
+
+[lints]
+workspace = true

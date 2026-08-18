@@ -1,0 +1,19 @@
+{
+  "page_size": 512,
+  "page_count": 56,
+  "tables": {
+    "pts": {
+      "srs_id": 4326,
+      "feature_count": 300,
+      "overflow_rows": 9,
+      "first_point_lonlat": [
+        -180.0,
+        -80.0
+      ],
+      "last_point_lonlat": [
+        178.8,
+        79.46666666666667
+      ]
+    }
+  }
+}

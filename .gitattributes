@@ -1,0 +1,6 @@
+# Never let git rewrite line endings. The tree is LF-authored (rustfmt runs on
+# LF), and it contains byte-exact binary test fixtures (*.gpkg / *.parquet)
+# whose integrity is pinned by docs/audits/fixture-sha256.txt — any implicit
+# text/eol conversion is corruption here, so conversion is disabled wholesale
+# instead of enumerating binary extensions.
+* -text

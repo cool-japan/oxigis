@@ -1,0 +1,64 @@
+[package]
+name = "oxigis-render"
+description = "wgpu tile map renderer: raster (COG/XYZ), vector (MVT), label placement — Pure Rust"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["gis", "map", "wgpu", "tiles", "renderer"]
+categories = ["science::geo", "graphics", "rendering"]
+
+# NOTE: deliberately does NOT depend on oxigis-core (blueprint §3) so other
+# projects can reuse the renderer standalone.
+
+[dependencies]
+wgpu = { workspace = true }
+lyon = { workspace = true }
+bytemuck = { workspace = true }
+prost = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+image = { workspace = true, optional = true }
+oxiarc-deflate = { workspace = true }
+oxiarc-lzw = { workspace = true }
+oxitext = { workspace = true }
+oxitext-raster = { workspace = true }
+# Vertical labels read `vmtx`/`VORG` and resolve faces by cmap themselves
+# (print/text v1.5, D-A3/D-A4). Already in the graph through `fontdue` and in
+# both wasm builds, so this direct edge adds no package — it only makes the
+# feature unification (`cff` included) local and explicit to this crate.
+ttf-parser = { workspace = true }
+
+[dev-dependencies]
+# Real font bytes for the label tests (Noto Sans Regular, OFL-1.1). Test-only:
+# the crate itself never embeds or loads a font, fonts arrive as injected bytes.
+oxifont-bundled = { workspace = true }
+# `futures::executor::block_on`, to drive the async fetcher traits from
+# synchronous tests. Deliberately NOT a dependency: the library's async surface
+# is `Pin<Box<dyn Future>>` from `core` (see `source::TileFuture`) and it owns no
+# executor, so a consumer of this crate never pulls `futures` in through it.
+futures = { workspace = true }
+
+[features]
+default = ["decode", "decode-webp"]
+# Raster tile byte decoding (PNG/JPEG -> RGBA8). Off for consumers that only
+# need the GPU/vector/viewport machinery and want to skip the `image` dep.
+decode = ["dep:image"]
+# WebP on top of `decode`, named separately because `decode.rs`'s docs have
+# always described it as its own feature and because it is the one codec with a
+# cost worth naming: `image`'s `webp` feature adds `image-webp` and
+# `quick-error` (both pure Rust, MIT OR Apache-2.0, no build script). Default-on
+# because raster PMTiles archives in circulation store WebP, and a build that
+# silently could not read them would be the surprising default; a consumer that
+# wants those two crates gone takes it off with `default-features = false`.
+decode-webp = ["dep:image", "image/webp"]
+# Exposes `sample_cog_bytes()`, a hand-built synthetic COG. Test support only:
+# enabled by `oxigis-ui`'s dev-dependencies so both crates test against one file.
+fixtures = []
+
+[lints]
+workspace = true

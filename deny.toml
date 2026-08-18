@@ -1,0 +1,200 @@
+# cargo-deny configuration for OxiGIS.
+#
+# Encodes COOLJAPAN release-engineering policy (mirrors oxigeo/deny.toml):
+#   - licenses: explicit allow-list for the resolved graph.
+#   - bans: COOLJAPAN-forbidden crates. Transitively unavoidable paths
+#     (e.g. png -> flate2 -> miniz_oxide via egui's default fonts/icons)
+#     are scoped with `wrappers` rather than hard-denied.
+#
+# Run with:
+#   cargo deny check bans       # mandatory pre-finish gate
+#   cargo deny check            # everything
+#
+# No GitHub Actions workflow wraps this (COOLJAPAN CI policy allows only
+# pypi-publish.yml / npm-publish.yml) — this is a local/manual gate.
+
+[graph]
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "wasm32-unknown-unknown",
+]
+
+[licenses]
+version = 2
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "0BSD",
+    "Unlicense",
+    "BSL-1.0",
+    # AND-clause components / font licenses (egui default fonts).
+    "IJG",
+    "OFL-1.1",
+    "LicenseRef-UFL-1.0",
+    # Ubuntu Font Licence 1.0: permissive font license (redistribution and
+    # modification allowed, only requires renaming a modified font family).
+    # Pulled in by epaint_default_fonts v0.34.3 (egui's bundled Ubuntu Mono
+    # default font), license = "(MIT OR Apache-2.0) AND OFL-1.1 AND
+    # Ubuntu-font-1.0".
+    "Ubuntu-font-1.0",
+]
+confidence-threshold = 0.8
+
+[bans]
+# Duplicates fail, with one named exception. Every duplicate in this graph is
+# reached only through `eframe` — its winit/accesskit/objc2/rustix/windows-sys
+# side and its epaint -> fontations (read-fonts/skrifa/font-types) side — a
+# stack pinned externally (see the workspace manifest's wgpu/egui note), so
+# nothing here can collapse it. `[[bans.skip-tree]]` below names that stack once
+# by crate name rather than transcribing ~25 exact version pairs that an
+# upstream patch bump would invalidate. Know the limit of that: `skip-tree`
+# prunes the whole eframe subtree from duplicate detection, so a NEW duplicate
+# fails only if at least one of its copies sits outside that tree.
+#
+# If this check ever fails for a reason nobody can place, the rollback is one
+# word: `multiple-versions = "warn"`, which is what this file carried before.
+multiple-versions = "deny"
+wildcards = "warn"
+allow-wildcard-paths = true
+deny = [
+    # --- Pure Rust Policy: banned BLAS / FFT / serialization / SQLite / SMT ---
+    { name = "openblas-src" },            # use oxiblas
+    { name = "netlib-src" },              # use oxiblas
+    { name = "rustfft" },                 # use oxifft
+    { name = "bincode" },                 # use oxicode
+    { name = "rusqlite" },                # use oxisql-sqlite-compat
+    { name = "libsqlite3-sys" },          # use oxisql-sqlite-compat
+    { name = "z3" },                      # use oxiz
+    { name = "z3-sys" },                  # use oxiz
+
+    # --- Pure Rust Policy: C-bound compression, replaced by oxiarc-* ---
+    # Listed with no `wrappers` so they hard-fail the moment anything
+    # (even transitively) pulls them in.
+    { name = "zip" },
+    { name = "zstd" },
+    { name = "zstd-sys" },
+    { name = "bzip2" },
+    { name = "bzip2-sys" },
+    { name = "lz4" },
+    { name = "lz4-sys" },
+    { name = "tar" },
+    { name = "brotli-sys" },
+
+    # `flate2` banned as a direct dependency; accepted transitive of the
+    # png/tiff image codecs (egui default fonts/icons pull `png`).
+    #
+    # NOTE: the COG reader does *not* go through `tiff`/flate2 — its DEFLATE and
+    # LZW come from `oxiarc-deflate`/`oxiarc-lzw` (Pure Rust, COOLJAPAN), the
+    # same choice `oxigeo-wasm` makes. The `tiff` wrapper stays listed only in
+    # case a future GeoTIFF *writing* path needs it.
+    { name = "flate2", wrappers = ["png", "tiff"] },
+
+    # `miniz_oxide` banned as a direct dependency; accepted transitive of
+    # flate2's pure-Rust backend and of png itself.
+    #
+    # `exr` and `backtrace` were listed here and matched NOTHING — neither
+    # appears in Cargo.lock — so `cargo deny check bans` reported two
+    # `unused-wrapper` warnings on every run (print/text v1.5, Part D
+    # cleanup 6). If `image`'s feature set ever turns OpenEXR back on, `exr`
+    # returns to this list; the removal is recorded here so it is not
+    # silently re-broken.
+    { name = "miniz_oxide", wrappers = ["flate2", "png"] },
+
+    # Pure-Rust ports accepted only through `parquet` (GeoParquet path);
+    # any new direct use must route through oxiarc-* instead.
+    #
+    # `lz4_flex` belongs with them: `lz4`/`lz4-sys` above ban the C library, but
+    # the crate the GeoParquet codec set actually resolves is this pure-Rust
+    # port, and without an entry a *direct* use would pass while the identical
+    # direct use of `snap` or `brotli` would not.
+    { name = "snap", wrappers = ["parquet"] },
+    { name = "brotli", wrappers = ["parquet"] },
+    { name = "lz4_flex", wrappers = ["parquet"] },
+
+    # --- Pure Rust Policy: C / assembly-blob crypto backends ---
+    # The desktop shell's TLS is `rustls` with NO bundled provider (ureq's
+    # `rustls-no-provider`) plus `rustls-graviola` named explicitly; see the
+    # workspace manifest's `ureq` entry. `ring` returns the moment anyone
+    # restores ureq's default features or turns on `rustls/aws-lc-rs`, and that
+    # regression is invisible in a `cargo build`. These entries are the whole
+    # enforcement of that invariant — the manifest used to state it as a prose
+    # "audit with `cargo tree -i ring`" instruction that nothing ever ran.
+    #
+    # `ring` sits in Cargo.lock today as an OFF optional dependency of
+    # `rustls-webpki`; cargo-deny resolves features, so the entry fires only if
+    # something switches that feature on, which is exactly the wanted trigger.
+    { name = "ring" },
+    { name = "aws-lc-sys" },
+    { name = "aws-lc-rs" },
+    { name = "openssl" },
+    { name = "openssl-sys" },
+    { name = "openssl-src" },
+    { name = "native-tls" },
+    { name = "security-framework-sys" },
+
+    # The wrapped `flate2`/`miniz_oxide` pair above is Pure Rust only while
+    # flate2 keeps its default backend; these are what its `zlib`/`zlib-ng`
+    # features would pull instead.
+    { name = "libz-sys" },
+    { name = "libz-ng-sys" },
+
+    # --- Pure Rust Policy: C build toolchains ---
+    # `cc` and `pkg-config` are the visible evidence that a build compiles or
+    # probes C. One invocation is accepted: Linux windowing glue, where no pure
+    # Rust libwayland-client exists — `wayland-backend` builds a C shim and
+    # `wayland-sys`/`x11-dl` read system `.pc` files, all of it reached through
+    # eframe -> egui-winit -> winit and only on the two `*-linux-gnu` targets.
+    # Any other C-compiling dependency now fails instead of passing unnoticed.
+    { name = "cc", wrappers = ["wayland-backend"] },
+    { name = "pkg-config", wrappers = ["wayland-sys", "x11-dl"] },
+    { name = "cmake" },
+    { name = "bindgen" },
+]
+
+# The externally-pinned GUI stack — see `multiple-versions` above. Named by
+# crate so upstream patch bumps inside the tree need no edit here.
+[[bans.skip-tree]]
+crate = "eframe"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+[advisories]
+version = 2
+db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = [
+    # `ttf-parser` is unmaintained. Informational: no vulnerability, and no
+    # patched release exists to move to. It cannot leave this graph either —
+    # `fontdue`, `oxifont-parser` and `oxitext` all depend on it, so the three
+    # direct edges (oxigis-render/-ui/-desktop) only name a copy that is
+    # already there. Dropping it means migrating the cmap/hmtx/fvar reads to
+    # `oxifont-parser`, which is code work, not a deny.toml decision.
+    #
+    # Recorded here rather than left to fail: `cargo deny check advisories` was
+    # already red on this before the [advisories] policy below was written, so
+    # the whole check was effectively unrunnable and nobody would have seen a
+    # NEW advisory arrive behind it.
+    "RUSTSEC-2026-0192",
+]
+# A yanked dependency blocks a release; it is never just a warning.
+yanked = "deny"
+# `workspace` scopes the unmaintained check to crates a change here can act on —
+# an unmaintained crate buried in the eframe stack is not something an OxiGIS
+# release can fix, and reporting it on every run only trains the gate away.
+unmaintained = "workspace"

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>OxiGIS — Pure Rust GIS in the browser</title>
+    <meta
+      name="description"
+      content="OxiGIS web shell: a Pure Rust full-stack GIS interface running on WebAssembly + WebGPU."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #12151a;
+        --fg: #d8dee9;
+        --muted: #8b95a5;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif;
+      }
+
+      /* Full-viewport drawing surface. eframe sizes the backing store from a
+         ResizeObserver on this element, so CSS pixels are all we set here. */
+      canvas#oxigis_canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      /* Shown until the wasm module takes over; also the target the Rust side
+         writes into on BOTH halves of the startup handshake — the real error
+         on failure, an empty string on success (see `show_status` in lib.rs).
+         The `:empty` rule below is what hides it, so the Rust side clearing it
+         is what uncovers the canvas. */
+      #oxigis_status {
+        /* `show_status` writes a plain text node, so newlines in a Rust-side
+           message need this to render as line breaks. */
+        white-space: pre-line;
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        padding: 2rem;
+        text-align: center;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: var(--muted);
+        pointer-events: none;
+      }
+
+      #oxigis_status:empty {
+        display: none;
+      }
+
+      /* Loading indicator: how many tile/COG/font fetches are in flight
+         right now (`crate::activity`), written by the Rust side once per
+         frame that the count actually changes — see `update_loading_indicator`
+         in lib.rs. `:empty` hides it exactly like `#oxigis_status` above, so
+         writing (or clearing) the text is the whole show/hide.
+
+         Top-right, clear of both corners `oxigis-ui` already draws into: the
+         basemap attribution plate owns the map's bottom-right corner
+         (`OxigisApp::paint_attribution`), and `top` is pushed past a single
+         menu-bar row's height so this never sits over `OxigisApp`'s own
+         File/Edit/View/Help bar or the project-status text beside it, even
+         on a narrow viewport where that row's content reaches further right.
+
+         `pointer-events: none` because — unlike the startup banner, which
+         owns the whole viewport until the canvas takes over — this sits over
+         the live map and must never intercept a click meant for the layer
+         underneath it. */
+      #oxigis_loading {
+        position: absolute;
+        top: 2.75rem;
+        right: 0.75rem;
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+        background: rgba(18, 21, 26, 0.85);
+        border: 1px solid rgba(216, 222, 233, 0.15);
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.4;
+        pointer-events: none;
+        animation: oxigis-loading-pulse 1.4s ease-in-out infinite;
+      }
+
+      #oxigis_loading:empty {
+        display: none;
+      }
+
+      @keyframes oxigis-loading-pulse {
+        0%,
+        100% {
+          opacity: 0.65;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      noscript {
+        display: block;
+        padding: 2rem;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Map labels use a Latin font compiled into the wasm module. CJK names
+         need a second face, which is fetched at runtime rather than bundled
+         (a pan-CJK font is 16 MB). To enable it, add the URL of a TTF or OTF
+         to the canvas below — it must be CORS-readable — or call
+         `oxigis_load_fallback_font(url)` from JavaScript at any time:
+
+           data-oxigis-fallback-font="https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-jp@latest/japanese-400-normal.ttf"
+
+         Left off by default: most visitors never see a CJK label and should
+         not pay for the download.
+
+         For CJK in PDF EXPORTS ONLY (labels stay Latin, nothing is fetched
+         until the first export), use the print twin instead — or call
+         `oxigis_load_print_font(url)`:
+
+           data-oxigis-print-font="https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-jp@latest/japanese-400-normal.ttf"
+
+         A layer styled Bold needs a real bold face — nothing is ever
+         synthetically emboldened, so without one Bold labels simply draw
+         Regular. The two attributes mirror the pair above (screen face
+         fetched at startup, export-only face fetched on the first export);
+         the JS halves are `oxigis_load_bold_font(url)` and
+         `oxigis_load_print_bold_font(url)`:
+
+           data-oxigis-bold-font="https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-jp@latest/japanese-700-normal.ttf"
+           data-oxigis-print-bold-font="https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-jp@latest/japanese-700-normal.ttf"
+
+         One more attribute, for testing rather than deployment: the shell
+         normally lets wgpu choose WebGPU or the WebGL2 fallback, and this
+         pins it, so the fallback can be exercised on a machine that has
+         WebGPU. Leave it off in production.
+
+           data-oxigis-backend="webgl"     (or "webgpu")
+    -->
+    <canvas id="oxigis_canvas"></canvas>
+
+    <div id="oxigis_status">
+      Loading OxiGIS…
+      <br />
+      Best viewed in a WebGPU-capable browser (Chrome / Edge 113+, Safari 26+,
+      Firefox 141+). WebGPU needs a secure context, so use
+      <code>http://localhost</code> or HTTPS; elsewhere the build falls back to
+      WebGL2 with reduced capability.
+    </div>
+
+    <!-- How many basemap-tile / COG-range / label-font fetches are in
+         flight right now. Empty (and therefore hidden — see the `:empty`
+         rule above) until the first fetch starts; the Rust side owns its
+         text from then on. -->
+    <div id="oxigis_loading" aria-live="polite"></div>
+
+    <noscript>OxiGIS needs JavaScript and WebAssembly to run.</noscript>
+
+    <script type="module">
+      // wasm-pack --target web emits `pkg/oxigis_web.js` next to this file.
+      // The default export initialises the module, which runs the
+      // `#[wasm_bindgen(start)]` entry point in `oxigis-web`'s lib.rs.
+      import init from "./pkg/oxigis_web.js";
+
+      const status = document.getElementById("oxigis_status");
+
+      try {
+        // Resolving says only that the module was instantiated. The entry
+        // point SPAWNS startup rather than awaiting it, so at this instant the
+        // canvas may not have been found, no adapter obtained and no frame
+        // painted — which is why this must NOT clear #oxigis_status. The Rust
+        // side owns that element from here on and clears it itself once
+        // `start()` has actually succeeded.
+        await init();
+      } catch (err) {
+        // A genuine page-side signal: the module never ran, so nothing on the
+        // Rust side can report anything.
+        console.error("OxiGIS: failed to load the wasm module", err);
+        status.textContent =
+          "OxiGIS failed to load. Run ./serve.sh to build pkg/ and serve this " +
+          "page over http://localhost — see the browser console for details.";
+      }
+    </script>
+  </body>
+</html>

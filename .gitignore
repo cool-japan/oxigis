@@ -1,0 +1,13 @@
+/target
+**/target
+Cargo.lock
+/dist
+/pkg
+**/pkg
+node_modules
+*.wasm.map
+.DS_Store
+
+# Working documents (plans/audits) — kept on the dev machine only, not published
+docs/plans/
+docs/audits/

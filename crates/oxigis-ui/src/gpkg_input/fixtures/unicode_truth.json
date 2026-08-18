@@ -1,0 +1,44 @@
+{
+  "page_size": 4096,
+  "page_count": 8,
+  "tables": {
+    "地点": {
+      "srs_id": 4326,
+      "geometry_type": "POINT",
+      "create_sql": "CREATE TABLE 地点 (fid INTEGER, geom BLOB, 名前 TEXT, 人口 INTEGER, 標高 REAL, PRIMARY KEY (fid DESC))",
+      "feature_count": 3,
+      "columns": [
+        "fid",
+        "geom",
+        "名前",
+        "人口",
+        "標高"
+      ],
+      "fids": [
+        1,
+        2,
+        3
+      ],
+      "names": [
+        "東京",
+        "大阪",
+        "札幌"
+      ],
+      "populations": [
+        13960000,
+        2691000,
+        1973000
+      ],
+      "elevations": [
+        40.0,
+        24.5,
+        26.0
+      ],
+      "first_point_lonlat": [
+        139.6917,
+        35.6895
+      ],
+      "rowid_alias_column": "fid"
+    }
+  }
+}

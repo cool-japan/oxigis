@@ -1,0 +1,136 @@
+{
+  "uncompressed.parquet": {
+    "codec": "NONE",
+    "readable": true,
+    "rows": 4,
+    "null_geometry_rows": 1,
+    "first_point_lonlat": [
+      139.6917,
+      35.6895
+    ],
+    "columns": [
+      "name",
+      "population",
+      "elevation",
+      "active"
+    ],
+    "japanese_name_row": 2,
+    "bytes": 2002
+  },
+  "snappy.parquet": {
+    "codec": "SNAPPY",
+    "readable": true,
+    "rows": 4,
+    "null_geometry_rows": 1,
+    "first_point_lonlat": [
+      139.6917,
+      35.6895
+    ],
+    "columns": [
+      "name",
+      "population",
+      "elevation",
+      "active"
+    ],
+    "japanese_name_row": 2,
+    "bytes": 2003
+  },
+  "brotli.parquet": {
+    "codec": "BROTLI",
+    "readable": true,
+    "rows": 4,
+    "null_geometry_rows": 1,
+    "first_point_lonlat": [
+      139.6917,
+      35.6895
+    ],
+    "columns": [
+      "name",
+      "population",
+      "elevation",
+      "active"
+    ],
+    "japanese_name_row": 2,
+    "bytes": 2038
+  },
+  "lz4.parquet": {
+    "codec": "LZ4",
+    "readable": true,
+    "rows": 4,
+    "null_geometry_rows": 1,
+    "first_point_lonlat": [
+      139.6917,
+      35.6895
+    ],
+    "columns": [
+      "name",
+      "population",
+      "elevation",
+      "active"
+    ],
+    "japanese_name_row": 2,
+    "bytes": 1997
+  },
+  "zstd.parquet": {
+    "codec": "ZSTD",
+    "readable": false,
+    "rows": 4,
+    "null_geometry_rows": 1,
+    "first_point_lonlat": [
+      139.6917,
+      35.6895
+    ],
+    "columns": [
+      "name",
+      "population",
+      "elevation",
+      "active"
+    ],
+    "japanese_name_row": 2,
+    "bytes": 2072
+  },
+  "gzip.parquet": {
+    "codec": "GZIP",
+    "readable": false,
+    "rows": 4,
+    "null_geometry_rows": 1,
+    "first_point_lonlat": [
+      139.6917,
+      35.6895
+    ],
+    "columns": [
+      "name",
+      "population",
+      "elevation",
+      "active"
+    ],
+    "japanese_name_row": 2,
+    "bytes": 2156
+  },
+  "projjson_3857.parquet": {
+    "crs": "EPSG:3857",
+    "rows": 4,
+    "first_point_3857": [
+      15550408.8,
+      4257159.1
+    ]
+  },
+  "unsupported_crs.parquet": {
+    "refused": true,
+    "crs_name": "RGF93 v1 / Lambert-93"
+  },
+  "covering_bbox.parquet": {
+    "rows": 4,
+    "bbox_column_excluded": true,
+    "columns": [
+      "name",
+      "population",
+      "elevation",
+      "active"
+    ]
+  },
+  "mixed_geom.parquet": {
+    "rows": 2,
+    "donut_holes": 1
+  }
+}
