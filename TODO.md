@@ -14,18 +14,9 @@ shipped is recorded here.
       through the WebGL2 fallback. What a headless run cannot answer is still
       open — the WebGPU path (that run fell back to WebGL2) and a human-eye pass
       over the map, the panels and a dropped GeoJSON in a real browser
-      (`bash crates/oxigis-web/serve.sh`). Every other gate the workspace runs is
+      (`bash crates/oxigis-web/serve.sh`, or the deployed build at
+      <https://gis.cooljapan.tech/>). Every other gate the workspace runs is
       headless, so this pass has no substitute.
-- [ ] Deploy the browser build to gis.cooljapan.tech — STAGED, not yet live. A
-      complete demo site is staged in the cooljapan site repo: a `public/gis/`
-      mount plus a Worker Host-header remap, so it will serve as
-      <https://gis.cooljapan.tech/>. It was built from this repo's main@24de6f7
-      with the `wasm-release` profile and verified locally under `wrangler dev` —
-      routing, MIME types and a sha256-identical wasm payload, plus app boot and
-      WebGL2 rendering end-to-end in headless Chrome. Left to the user: commit
-      and deploy the cooljapan site repo (`npm run deploy`), add the
-      `gis.cooljapan.tech` custom domain in the Cloudflare dashboard, and take
-      the WebGPU eyeball above once against a real browser.
 - [ ] Report upstream to cool-japan/oxitext: `oxitext-raster` 0.2.3's
       thread-local `fontdue::Font` cache (`src/tl_cache.rs`,
       `get_or_parse_fontdue`) keys each font by an FNV-1a hash of **at most the

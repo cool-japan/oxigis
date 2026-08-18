@@ -15,7 +15,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.95"
 authors = ["COOLJAPAN OU (Team Kitasan)"]
@@ -26,9 +26,9 @@ readme = "README.md"
 
 [workspace.dependencies]
 # ---- Internal crates -------------------------------------------------------
-oxigis-core = { version = "0.1.0", path = "crates/oxigis-core" }
-oxigis-render = { version = "0.1.0", path = "crates/oxigis-render" }
-oxigis-ui = { version = "0.1.0", path = "crates/oxigis-ui" }
+oxigis-core = { version = "0.1.1", path = "crates/oxigis-core" }
+oxigis-render = { version = "0.1.1", path = "crates/oxigis-render" }
+oxigis-ui = { version = "0.1.1", path = "crates/oxigis-ui" }
 
 # ---- COOLJAPAN ecosystem (Policy #9: prefer internal deps) -----------------
 # OxiGeo: data I/O, CRS/projection, spatial analysis (replaces GDAL et al.)
